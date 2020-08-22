@@ -30,16 +30,6 @@ impl TryFrom<&[u8; 16]> for NommoMsg {
     }
 }
 
-fn clamp(from: u8, to: u8, value: u8) -> u8 {
-    use std::cmp::Ordering::*;
-
-    match (value.cmp(&from), value.cmp(&to)) {
-        (Less, _) => from,
-        (_, Greater) => to,
-        _ => value,
-    }
-}
-
 #[derive(Debug, PartialEq)]
 enum NommoVol {
     Value(u8),
@@ -50,7 +40,13 @@ impl NommoVol {
     fn inc(&self, step: u8) -> Self {
         match self {
             Self::Muted => Self::Value(step),
-            Self::Value(val) => Self::Value(clamp(0, 100, val + step)),
+            Self::Value(val) => {
+                if val + step > 100 {
+                    Self::Value(100)
+                } else {
+                    Self::Value(val + step)
+                }
+            },
         }
     }
 
@@ -58,11 +54,10 @@ impl NommoVol {
         match self {
             Self::Muted => Self::Muted,
             Self::Value(val) => {
-                let new_value = clamp(0, 100, val - step);
-                if new_value == 0 {
+                if val <= &step {
                     Self::Muted
                 } else {
-                    Self::Value(new_value)
+                    Self::Value(val - step)
                 }
             }
         }
@@ -136,7 +131,7 @@ fn set_sink_mute(sink_name: &str, mute: bool) -> subprocess::Result<()> {
         .map(|_| ())?;
 
     if mute {
-        println!("Set mute to true");
+        println!("[nommo] Set mute to true");
     }
 
     Ok(())
@@ -149,7 +144,7 @@ fn set_sink_volume(sink_name: &str, vol: NommoVol) -> subprocess::Result<()> {
         .join()
         .map(|_| ())?;
 
-    println!("Set volume to: {}", vol);
+    println!("[nommo] Set volume to: {}", vol);
 
     Ok(())
 }
