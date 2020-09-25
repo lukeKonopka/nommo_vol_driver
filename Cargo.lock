@@ -25,9 +25,9 @@ checksum = "9457b06509d27052635f90d6466700c65095fdf75409b3fbdd903e988b886f49"
 
 [[package]]
 name = "libpulse-binding"
-version = "2.16.1"
+version = "2.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c71487f89ebfe3d2c23e706774d9d5c25208a30205909d77b304066876306bd"
+checksum = "1795efad67f34ae95740ded62e3c346e707b0caeb0f6088d75958e97316b5538"
 dependencies = [
  "libc",
  "libpulse-sys",
@@ -50,6 +50,7 @@ name = "nommo_vol_driver"
 version = "0.1.0"
 dependencies = [
  "hidapi",
+ "libpulse-binding",
  "rust-pulsectl",
  "subprocess",
 ]

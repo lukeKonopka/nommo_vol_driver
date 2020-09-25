@@ -1,10 +1,13 @@
 use std::convert::TryFrom;
-use std::fmt::{Display, Formatter, Result};
 use subprocess::Exec;
+
+use libpulse_binding::volume::{ChannelVolumes, Volume, VOLUME_NORM};
+use pulsectl::controllers::DeviceControl;
+use pulsectl::controllers::SinkController;
 
 const NOMMO_VENDOR_ID: u16 = 0x1532;
 const NOMMO_PRODUCT_ID: u16 = 0x0517;
-const VOL_STEP: u8 = 5;
+const VOL_DELTA: f64 = 0.05;
 
 #[derive(Debug, PartialEq)]
 enum NommoMsg {
@@ -24,91 +27,74 @@ impl TryFrom<&[u8; 16]> for NommoMsg {
             [1, 233, ..] => Ok(Self::VolUp),
             [1, 234, ..] => Ok(Self::VolDown),
             [5, 15, _, v, ..] => Ok(Self::EqValue(*v)),
-            _ =>  Ok(Self::Noop),
+            _ => Ok(Self::Noop),
         }
     }
 }
 
-#[derive(Debug, PartialEq)]
-enum NommoVol {
-    Value(u8),
-    Muted,
+fn volume_from_percent(delta: f64) -> Volume {
+    let vol_raw = (delta * 100.0) * (f64::from(VOLUME_NORM.0) / 100.0);
+    Volume::from(Volume(vol_raw as u32))
 }
 
-impl NommoVol {
-    fn inc(&self, step: u8) -> Self {
-        match self {
-            Self::Muted => Self::Value(step),
-            Self::Value(val) => {
-                if val + step > 100 {
-                    Self::Value(100)
-                } else {
-                    Self::Value(val + step)
-                }
-            },
-        }
-    }
-
-    fn dec(&self, step: u8) -> Self {
-        match self {
-            Self::Muted => Self::Muted,
-            Self::Value(val) => {
-                if val <= &step {
-                    Self::Muted
-                } else {
-                    Self::Value(val - step)
-                }
-            }
-        }
-    }
+fn set_volume(volumes: &ChannelVolumes, sink_controller: &mut SinkController, sink_index: u32) {
+    let op = sink_controller
+        .handler
+        .introspect
+        .set_sink_volume_by_index(sink_index, &volumes, None);
+    sink_controller
+        .handler
+        .wait_for_operation(op)
+        .expect("Error setting volume");
 }
 
-impl TryFrom<String> for NommoVol {
-    type Error = std::num::ParseIntError;
-    fn try_from(
-        other: String,
-    ) -> std::result::Result<Self, <Self as std::convert::TryFrom<String>>::Error> {
-        let number_string = &other[..other.len() - 1];
-        let number_value = number_string.parse::<u8>()?;
-        if number_value == 0 {
-            Ok(Self::Muted)
-        } else {
-            Ok(Self::Value(number_value))
-        }
-    }
-}
+fn set_mute(mute: bool, sink_controller: &mut SinkController, sink_index: u32) {
+    let op = sink_controller
+        .handler
+        .introspect
+        .set_sink_mute_by_index(sink_index, mute, None);
 
-impl Display for NommoVol {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        match self {
-            Self::Value(v) => write!(f, "{}%", v),
-            Self::Muted => write!(f, "0%"),
-        }
-    }
+    sink_controller
+        .handler
+        .wait_for_operation(op)
+        .expect("Error setting volume");
 }
-
-use pulsectl::controllers::DeviceControl;
-use pulsectl::controllers::SinkController;
 
 fn handle_device(dev_handle: hidapi::HidDevice) {
     // get Pulse Audio default device
     let mut sink_controller = SinkController::create();
-    let default_sink = sink_controller.get_default_device().expect("Cannot get PulseAudio default sink");
 
     let mut buff = [0 as u8; 16];
     loop {
+        let default_sink = sink_controller
+            .get_default_device()
+            .expect("Cannot get PulseAudio default sink");
+        let mut current_volume = default_sink.clone().volume;
+
         dev_handle.read(&mut buff).expect("Cannot read from device");
         let msg = NommoMsg::try_from(&buff).expect("Cannot convert data");
-
         match msg {
             NommoMsg::VolUp => {
-                // TODO: add support for unmuting
-                // TODO: add 100% cap
-                sink_controller.increase_device_volume_by_percent(default_sink.index, VOL_STEP as f64 / 100.0);
+                let volumes = current_volume
+                    .inc_clamp(volume_from_percent(VOL_DELTA), volume_from_percent(1.0))
+                    .expect("Cannot set new ChannelVolumes");
+                set_volume(volumes, &mut sink_controller, default_sink.index);
+
+                // if muted, unmute
+                if default_sink.mute {
+                    set_mute(false, &mut sink_controller, default_sink.index);
+                }
             }
             NommoMsg::VolDown => {
-                // TODO: add support for muting
-                sink_controller.decrease_device_volume_by_percent(default_sink.index, VOL_STEP as f64 / 100.0);
+                let volumes = current_volume
+                    .decrease(volume_from_percent(VOL_DELTA))
+                    .expect("Cannot set new ChannelVolumes");
+                set_volume(volumes, &mut sink_controller, default_sink.index);
+
+                // if volume at 0%, mute
+                if default_sink.volume == volume_from_percent(0.0) && !default_sink.mute {
+                    set_mute(true, &mut sink_controller, default_sink.index);
+                }
             }
             _ => {}
         }
@@ -122,12 +108,10 @@ fn debug_user_name() -> subprocess::Result<()> {
     Ok(())
 }
 
-
 fn main() {
     debug_user_name().expect("Cannot debug print username");
 
     // let default_sink_name = get_default_sink_name().expect("Cannot get default sink name");
-
 
     match hidapi::HidApi::new() {
         Ok(api) => {

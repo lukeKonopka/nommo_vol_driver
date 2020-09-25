@@ -9,4 +9,5 @@ edition = "2018"
 [dependencies]
 hidapi = "1.2.2"
 rust-pulsectl = "0.2.6"
+libpulse-binding = "2.16.2"
 subprocess = "0.2.4"
