@@ -8,4 +8,5 @@ edition = "2018"
 
 [dependencies]
 hidapi = "1.2.2"
+rust-pulsectl = "0.2.6"
 subprocess = "0.2.4"
