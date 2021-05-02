@@ -52,7 +52,6 @@ dependencies = [
  "hidapi",
  "libpulse-binding",
  "rust-pulsectl",
- "subprocess",
 ]
 
 [[package]]
@@ -68,16 +67,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0133fcaf02798ef68c074313bbd5a47de2d7edb1d8db9c61872206bd7f398e8"
 dependencies = [
  "libpulse-binding",
-]
-
-[[package]]
-name = "subprocess"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5109e3c3215ce5339ca9766a6db7f39144ccc7d9bad53b96d65cfb14ae6c2985"
-dependencies = [
- "libc",
- "winapi",
 ]
 
 [[package]]
