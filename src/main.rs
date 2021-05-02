@@ -1,5 +1,4 @@
 use std::convert::TryFrom;
-use subprocess::Exec;
 
 use libpulse_binding::volume::{ChannelVolumes, Volume, VOLUME_NORM};
 use pulsectl::controllers::DeviceControl;
@@ -101,18 +100,7 @@ fn handle_device(dev_handle: hidapi::HidDevice) {
     }
 }
 
-fn debug_user_name() -> subprocess::Result<()> {
-    let whoami_res = { Exec::shell("whoami") }.capture()?.stdout_str();
-
-    println!("Current user: {}", whoami_res);
-    Ok(())
-}
-
 fn main() {
-    debug_user_name().expect("Cannot debug print username");
-
-    // let default_sink_name = get_default_sink_name().expect("Cannot get default sink name");
-
     match hidapi::HidApi::new() {
         Ok(api) => {
             let device = api.open(NOMMO_VENDOR_ID, NOMMO_PRODUCT_ID);
